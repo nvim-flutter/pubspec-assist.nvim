@@ -221,7 +221,7 @@ function M.show_dependency_versions()
       return line ~= "" and not vim.startswith(line, "//")
     end, lines)
     local content = table.concat(filtered, "\n")
-    local pubspec = require("yaml").eval(content)
+    local pubspec = require("lyaml").load(content)
     local dependencies = vim.tbl_extend(
       "keep",
       {},
