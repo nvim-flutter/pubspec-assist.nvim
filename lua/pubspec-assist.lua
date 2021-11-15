@@ -146,9 +146,10 @@ end
 ---@param buf number
 ---@param package Package
 local function persist_package(buf, package)
-  local ok, versions = pcall(api.nvim_buf_get_var,buf, PUBSPEC_VAR_NAME)
+  local ok, versions = pcall(api.nvim_buf_get_var, buf, PUBSPEC_VAR_NAME)
   versions = ok and versions or {}
   versions[package.name] = package
+  versions.last_changed = api.nvim_buf_get_changedtick(buf)
   api.nvim_buf_set_var(buf, PUBSPEC_VAR_NAME, versions)
 end
 
@@ -204,7 +205,13 @@ function M.show_dependency_versions()
     local buf_id = api.nvim_get_current_buf()
     local last_changed = api.nvim_buf_get_changedtick(buf_id)
     local ok, cached_versions = pcall(api.nvim_buf_get_var, buf_id, PUBSPEC_VAR_NAME)
-    if ok and cached_versions and cached_versions.last_changed >= last_changed then
+    if
+      ok
+      and last_changed
+      and cached_versions
+      and cached_versions.last_changed
+      and cached_versions.last_changed >= last_changed
+    then
       return
     end
 
@@ -223,7 +230,6 @@ function M.show_dependency_versions()
     )
     local jobs = {}
     local results = match_dependencies(dependencies, lines)
-    results.last_changed = last_changed
     for package, value in pairs(dependencies) do
       -- NOTE: ignore packages who's values are tables as these are usually SDK packages e.g.
       -- flutter_test: {
