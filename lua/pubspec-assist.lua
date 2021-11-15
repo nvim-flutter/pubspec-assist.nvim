@@ -53,10 +53,28 @@ local defaults = {
   },
 }
 
+local function dependencies_installed()
+  local ok = pcall(require, "lyaml")
+  if not ok then
+    vim.notify(
+      "Please ensure lyaml is installed see the README for more information",
+      vim.log.levels.ERROR,
+      {
+        title = "Pubspec Assist",
+      }
+    )
+    return false
+  end
+  return true
+end
+
 ---Adopt user config and initialise the plugin.
 ---@param user_config PubspecAssistConfig
 function M.setup(user_config)
   user_config = user_config or {}
+  if not dependencies_installed() then
+    return
+  end
   M.config = vim.tbl_deep_extend("force", defaults, user_config)
   vim.cmd(fmt("highlight link %s %s", hls[state.OUTDATED], M.config.highlights.outdated))
   vim.cmd(fmt("highlight link %s %s", hls[state.UP_TO_DATE], M.config.highlights.up_to_date))
