@@ -184,28 +184,25 @@ local function on_err(results, name, err)
   end
 end
 
-function M.__handle_input_complete()
-  local win = api.nvim_get_current_win()
+---Process user input
+---@param win number
+local function handle_input_complete(win)
+  vim.cmd("stopinsert")
   local input = vim.trim(vim.fn.getline("."))
   api.nvim_win_close(win, true)
-  print("input: " .. vim.inspect(input))
+  if input ~= "" then
+    fetch(fmt("packages/%s", input), function(err)
+      print(vim.inspect(err))
+    end, function(data)
+      print("data: " .. vim.inspect(data))
+    end)
+  end
 end
 
----Proxy for buffer mapping
----@param buf number
----@param mode '"n"|"v"|"i"|"c"|"s"'
----@param left string
----@param right string
----@param opts table
-local function buf_map(buf, mode, left, right, opts)
-  opts = opts or {}
-  opts.silent = true
-  opts.noremap = true
-  api.nvim_buf_set_keymap(buf, mode, left, right, opts)
-end
 -- Create floating window to collect user input
 function M.search_dependencies()
-  require("plenary.popup").create("", {
+  local map = require("pubspec-assist.utils").map
+  local win = require("plenary.popup").create("", {
     title = "Enter dependency name(s)",
     style = "minimal",
     borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
@@ -219,20 +216,11 @@ function M.search_dependencies()
     line = "cursor+2",
     col = "cursor-1",
   })
-  buf_map(0, "i", "<Esc>", "<cmd>stopinsert | q!<CR>")
-  buf_map(0, "n", "<Esc>", "<cmd>stopinsert | q!<CR>")
-  buf_map(
-    0,
-    "i",
-    "<CR>",
-    "<cmd>stopinsert | lua require('pubspec-assist').__handle_input_complete()<CR>"
-  )
-  buf_map(
-    0,
-    "n",
-    "<CR>",
-    "<cmd>stopinsert | lua require('pubspec-assist').__handle_input_complete()<CR>"
-  )
+  local opts = { buffer = 0 }
+  map("i", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
+  map("n", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
+  map("i", "<CR>", wrap(handle_input_complete, win), opts)
+  map("n", "<CR>", wrap(handle_input_complete, win), opts)
 end
 
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
