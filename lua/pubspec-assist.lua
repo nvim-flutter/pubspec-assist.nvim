@@ -206,15 +206,13 @@ function M.search_dependencies()
     title = "Enter dependency name(s)",
     style = "minimal",
     borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
-    relative = "cursor",
+    relative = "center",
     borderhighlight = "FloatBorder",
     titlehighlight = "Title",
     highlight = "Directory",
     focusable = true,
     width = 35,
     height = 1,
-    line = "cursor+2",
-    col = "cursor-1",
   })
   local opts = { buffer = 0 }
   utils.map("i", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
