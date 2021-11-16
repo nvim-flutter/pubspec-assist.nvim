@@ -95,9 +95,17 @@ local function fetch(path, on_err, on_success)
     stdout_buffered = true,
     stderr_buffered = true,
     on_stderr = function(_, err, _)
+      -- ignore empty error responses, as curl sends an empty string back
+      if type(err) == "table" and err[1] == "" then
+        return
+      end
       on_err(err)
     end,
-    on_stdout = function(_, data, _)
+    on_stdout = function(_, body, _)
+      local data = vim.fn.json_decode(table.concat(body, "\n"))
+      if not data then
+        return notify("No data returned for " .. path, L.ERROR, { title = PLUGIN_TITLE })
+      end
       on_success(data)
     end,
   })
@@ -160,21 +168,20 @@ local function persist_package(buf, package)
   versions[buf].last_changed = api.nvim_buf_get_changedtick(buf)
 end
 
-local function on_success(context, body)
+local function on_package_fetch_success(context, data)
   assert(context, "The context must be passed in")
-  assert(body, "The response body must be passed in")
+  assert(data, "The response body must be passed in")
   local results = context.results
   local name = context.package_name
   local buf_id = context.buf_id
-  local dependency = vim.fn.json_decode(table.concat(body, "\n"))
   if results[name] then
-    results[name] = vim.tbl_extend("force", results[name], extract_dependency_info(dependency))
+    results[name] = vim.tbl_extend("force", results[name], extract_dependency_info(data))
     persist_package(buf_id, results[name])
     show_version(buf_id, results[name])
   end
 end
 
-local function on_err(results, name, err)
+local function on_package_fetch_err(results, name, err)
   if type(err) == "table" and err[1] ~= "" then
     results[name] = results[name] or {}
     results[name] = {
@@ -189,8 +196,11 @@ end
 local function handle_input_complete(win)
   vim.cmd("stopinsert")
   local input = vim.trim(vim.fn.getline("."))
-  api.nvim_win_close(win, true)
-  if input ~= "" then
+  if not api.nvim_win_is_valid(win) then
+    return
+  end
+  local ok = pcall(api.nvim_win_close, win, true)
+  if ok and input ~= "" then
     fetch(fmt("packages/%s", input), function(err)
       print(vim.inspect(err))
     end, function(data)
@@ -265,7 +275,8 @@ function M.show_dependency_versions()
           results = results,
           package_name = package,
         }
-        local err, success = wrap(on_err, context), wrap(on_success, context)
+        local err, success =
+          wrap(on_package_fetch_err, context), wrap(on_package_fetch_success, context)
         local job_id = fetch(fmt("packages/%s", package), err, success)
         jobs[#jobs + 1] = job_id
       end
