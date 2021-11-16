@@ -122,7 +122,7 @@ end
 ---@param dependency table<string, any>
 ---@return Package
 local function extract_dependency_info(dependency)
-  local data = {name = dependency.name}
+  local data = { name = dependency.name }
   if dependency.versions then
     data.versions = vim.tbl_map(function(version)
       return { version = version.version, published = version.published }
@@ -206,24 +206,32 @@ local function find_dependency_file()
   end
 end
 
----Insert the package information into the buffer after finding the correct section for it
----@param package Package
----@param dependency_type number?
-local function insert_package(package, dependency_type)
+local function get_block_end(dependency_type)
   local pattern = (not dependency_type or dependency_type == dep_type.DEPENDENCY)
       and DEPENDENCY_PATTERN
     or DEV_DEPENDENCY_PATTERN
   local pos = fn.searchpos(pattern, "n")
-  local lnum, col = pos[1], pos[2]
-  local indent = string.rep(" ", fn.indent(lnum + 1))
-  api.nvim_buf_set_lines(
-    0,
-    lnum,
-    lnum,
-    false,
-    { fmt("%s%s: %s", indent, package.name, package.latest) }
-  )
-  api.nvim_win_set_cursor(0, { lnum, col })
+  local lnum = pos[1]
+  local indent = fn.indent(lnum + 1)
+  local next_indent = indent
+  local curr_line = lnum + 1
+  local line_count = api.nvim_buf_line_count(0)
+  while next_indent > 0 and curr_line <= line_count do
+    next_indent = fn.indent(curr_line + 1)
+    curr_line = curr_line + 1
+  end
+  return curr_line - 1, indent
+end
+
+---Insert the package information into the buffer after finding the correct section for it
+---@param package Package
+---@param dependency_type number?
+local function insert_package(package, dependency_type)
+  local lnum, indent = get_block_end(dependency_type)
+  local indent_str = string.rep(" ", indent)
+  local dep = fmt("%s%s: %s", indent_str, package.name, package.latest)
+  api.nvim_buf_set_lines(0, lnum, lnum, false, { dep })
+  api.nvim_win_set_cursor(0, { lnum, indent + 1 })
 end
 
 ---Process user input
@@ -264,8 +272,14 @@ function M.search_dependencies()
     height = 1,
   })
   local opts = { buffer = 0 }
-  utils.map("i", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
-  utils.map("n", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
+  local function close_win()
+    vim.cmd("stopinsert")
+    if api.nvim_win_is_valid(win) then
+      api.nvim_win_close(win, true)
+    end
+  end
+  utils.map("i", "<Esc>", close_win, opts)
+  utils.map("n", "<Esc>", close_win, opts)
   utils.map("i", "<CR>", utils.wrap(handle_input_complete, win), opts)
   utils.map("n", "<CR>", utils.wrap(handle_input_complete, win), opts)
 end
