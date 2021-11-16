@@ -3,6 +3,9 @@ local M = {}
 local api = vim.api
 local fn = vim.fn
 local fmt = string.format
+local notify = vim.notify
+
+local L = vim.log.levels
 
 local NAMESPACE = api.nvim_create_namespace("pubspec_assist")
 local BASE_URI = "https://pub.dartlang.org/api"
@@ -52,40 +55,6 @@ local defaults = {
     unknown = "ErrorMsg",
   },
 }
-
-local function dependencies_installed()
-  local ok = pcall(require, "lyaml")
-  if not ok then
-    vim.notify(
-      "Please ensure lyaml is installed see the README for more information",
-      vim.log.levels.ERROR,
-      {
-        title = "Pubspec Assist",
-      }
-    )
-    return false
-  end
-  return true
-end
-
----Adopt user config and initialise the plugin.
----@param user_config PubspecAssistConfig
-function M.setup(user_config)
-  user_config = user_config or {}
-  if not dependencies_installed() then
-    return
-  end
-  M.config = vim.tbl_deep_extend("force", defaults, user_config)
-  vim.cmd(fmt("highlight link %s %s", hls[state.OUTDATED], M.config.highlights.outdated))
-  vim.cmd(fmt("highlight link %s %s", hls[state.UP_TO_DATE], M.config.highlights.up_to_date))
-  vim.cmd(fmt("highlight link %s %s", hls[state.UNKNOWN], M.config.highlights.unknown))
-  vim.cmd(
-    fmt(
-      'autocmd! BufEnter,BufWritePost %s lua require("pubspec-assist").show_dependency_versions()',
-      PUBSPEC_FILE
-    )
-  )
-end
 
 ---@param package Package
 ---@return State
@@ -158,6 +127,25 @@ local function extract_dependency_info(dependency)
   return data
 end
 
+local function match_dependencies(dependencies, lines)
+  local results = {}
+  for lnum, line in ipairs(lines) do
+    if line and line ~= "" then
+      local key = line:match(".-:")
+      if key then
+        local package_name = vim.trim(key:gsub(":", ""))
+        if dependencies[package_name] then
+          results[package_name] = results[package_name] or {}
+          results[package_name].name = package_name
+          results[package_name].current = dependencies[package_name]
+          results[package_name].lnum = lnum
+        end
+      end
+    end
+  end
+  return results
+end
+
 ---Add a dependency to the buffer variable dependencies table
 --- TODO: verify whether this causes race conditions as multiple async jobs
 --- are updating this variable potentially simultaneously.
@@ -191,29 +179,61 @@ local function on_err(results, name, err)
     results[name] = {
       error = err,
     }
-    vim.notify(fmt("Error fetching package info for %s", name), vim.log.levels.ERROR, {
+    notify(fmt("Error fetching package info for %s", name), L.ERROR, {
       title = "Pubspec Assist",
     })
   end
 end
 
-local function match_dependencies(dependencies, lines)
-  local results = {}
-  for lnum, line in ipairs(lines) do
-    if line and line ~= "" then
-      local key = line:match(".-:")
-      if key then
-        local package_name = vim.trim(key:gsub(":", ""))
-        if dependencies[package_name] then
-          results[package_name] = results[package_name] or {}
-          results[package_name].name = package_name
-          results[package_name].current = dependencies[package_name]
-          results[package_name].lnum = lnum
-        end
-      end
-    end
-  end
-  return results
+function M.__handle_input_complete()
+  local win = api.nvim_get_current_win()
+  local input = vim.trim(vim.fn.getline("."))
+  api.nvim_win_close(win, true)
+  print("input: " .. vim.inspect(input))
+end
+
+---Proxy for buffer mapping
+---@param buf number
+---@param mode '"n"|"v"|"i"|"c"|"s"'
+---@param left string
+---@param right string
+---@param opts table
+local function buf_map(buf, mode, left, right, opts)
+  opts = opts or {}
+  opts.silent = true
+  opts.noremap = true
+  api.nvim_buf_set_keymap(buf, mode, left, right, opts)
+end
+-- Create floating window to collect user input
+function M.search_dependencies()
+  require("plenary.popup").create("", {
+    title = "Enter dependency name(s)",
+    style = "minimal",
+    borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
+    relative = "cursor",
+    borderhighlight = "FloatBorder",
+    titlehighlight = "Title",
+    highlight = "Directory",
+    focusable = true,
+    width = 35,
+    height = 1,
+    line = "cursor+2",
+    col = "cursor-1",
+  })
+  buf_map(0, "i", "<Esc>", "<cmd>stopinsert | q!<CR>")
+  buf_map(0, "n", "<Esc>", "<cmd>stopinsert | q!<CR>")
+  buf_map(
+    0,
+    "i",
+    "<CR>",
+    "<cmd>stopinsert | lua require('pubspec-assist').__handle_input_complete()<CR>"
+  )
+  buf_map(
+    0,
+    "n",
+    "<CR>",
+    "<cmd>stopinsert | lua require('pubspec-assist').__handle_input_complete()<CR>"
+  )
 end
 
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
@@ -265,6 +285,36 @@ function M.show_dependency_versions()
       end
     end
   end)
+end
+
+local function dependencies_installed()
+  local ok = pcall(require, "lyaml")
+  if not ok then
+    notify("Please ensure lyaml is installed see the README for more information", L.ERROR, {
+      title = "Pubspec Assist",
+    })
+    return false
+  end
+  return true
+end
+
+---Adopt user config and initialise the plugin.
+---@param user_config PubspecAssistConfig
+function M.setup(user_config)
+  user_config = user_config or {}
+  if not dependencies_installed() then
+    return
+  end
+  M.config = vim.tbl_deep_extend("force", defaults, user_config)
+  vim.cmd(fmt("highlight link %s %s", hls[state.OUTDATED], M.config.highlights.outdated))
+  vim.cmd(fmt("highlight link %s %s", hls[state.UP_TO_DATE], M.config.highlights.up_to_date))
+  vim.cmd(fmt("highlight link %s %s", hls[state.UNKNOWN], M.config.highlights.unknown))
+  vim.cmd(
+    fmt(
+      'autocmd! BufEnter,BufWritePost %s lua require("pubspec-assist").show_dependency_versions()',
+      PUBSPEC_FILE
+    )
+  )
 end
 
 return M
