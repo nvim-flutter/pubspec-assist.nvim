@@ -111,16 +111,6 @@ local function fetch(path, on_err, on_success)
   })
 end
 
-local function wrap(cb, ...)
-  local args = { ... }
-  return function(...)
-    for i = 1, select("#", ...) do
-      args[#args + 1] = select(i, ...)
-    end
-    return cb(unpack(args))
-  end
-end
-
 local function extract_dependency_info(dependency)
   local data = {}
   if dependency.versions then
@@ -211,7 +201,7 @@ end
 
 -- Create floating window to collect user input
 function M.search_dependencies()
-  local map = require("pubspec-assist.utils").map
+  local utils = require("pubspec-assist.utils")
   local win = require("plenary.popup").create("", {
     title = "Enter dependency name(s)",
     style = "minimal",
@@ -227,16 +217,17 @@ function M.search_dependencies()
     col = "cursor-1",
   })
   local opts = { buffer = 0 }
-  map("i", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
-  map("n", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
-  map("i", "<CR>", wrap(handle_input_complete, win), opts)
-  map("n", "<CR>", wrap(handle_input_complete, win), opts)
+  utils.map("i", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
+  utils.map("n", "<Esc>", "<cmd>stopinsert | q!<CR>", opts)
+  utils.map("i", "<CR>", utils.wrap(handle_input_complete, win), opts)
+  utils.map("n", "<CR>", utils.wrap(handle_input_complete, win), opts)
 end
 
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
 -- pub.dev for the version of each dependency.
 function M.show_dependency_versions()
   vim.schedule(function()
+    local wrap = require("pubspec-assist.utils").wrap
     local buf_id = api.nvim_get_current_buf()
     local last_changed = api.nvim_buf_get_changedtick(buf_id)
     local cached_versions = versions[buf_id]
