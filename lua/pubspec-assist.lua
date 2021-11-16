@@ -11,6 +11,7 @@ local NAMESPACE = api.nvim_create_namespace("pubspec_assist")
 local BASE_URI = "https://pub.dartlang.org/api"
 local PUBSPEC_FILE = "pubspec.yaml"
 local HL_PREFIX = "PubspecAssist"
+local PLUGIN_TITLE = "Pubspec Assist"
 
 ---@class State
 ---@field OUTDATED number
@@ -179,9 +180,7 @@ local function on_err(results, name, err)
     results[name] = {
       error = err,
     }
-    notify(fmt("Error fetching package info for %s", name), L.ERROR, {
-      title = "Pubspec Assist",
-    })
+    notify(fmt("Error fetching package info for %s", name), L.ERROR, { title = PLUGIN_TITLE })
   end
 end
 
@@ -290,7 +289,7 @@ local function dependencies_installed()
   local ok = pcall(require, "lyaml")
   if not ok then
     notify("Please ensure lyaml is installed see the README for more information", L.ERROR, {
-      title = "Pubspec Assist",
+      title = PLUGIN_TITLE,
     })
     return false
   end
