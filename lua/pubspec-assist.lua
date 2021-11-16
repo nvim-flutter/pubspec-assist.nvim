@@ -229,7 +229,7 @@ end
 local function insert_package(package, dependency_type)
   local lnum, indent = get_block_end(dependency_type)
   local indent_str = string.rep(" ", indent)
-  local dep = fmt("%s%s: %s", indent_str, package.name, package.latest)
+  local dep = fmt("%s%s: ^%s", indent_str, package.name, package.latest)
   api.nvim_buf_set_lines(0, lnum, lnum, false, { dep })
   api.nvim_win_set_cursor(0, { lnum, indent + 1 })
 end
