@@ -12,6 +12,8 @@ local BASE_URI = "https://pub.dartlang.org/api"
 local PUBSPEC_FILE = "pubspec.yaml"
 local HL_PREFIX = "PubspecAssist"
 local PLUGIN_TITLE = "Pubspec Assist"
+local DEV_DEPENDENCY_PATTERN = "dev_dependencies:"
+local DEPENDENCY_PATTERN = "dependencies:"
 
 ---@class State
 ---@field OUTDATED number
@@ -52,6 +54,7 @@ local icons = {
 ---@field lnum number
 ---@field error table
 ---@field name string
+---@field type number
 
 local defaults = {
   highlights = {
@@ -119,7 +122,7 @@ end
 ---@param dependency table<string, any>
 ---@return Package
 local function extract_dependency_info(dependency)
-  local data = {}
+  local data = {name = dependency.name}
   if dependency.versions then
     data.versions = vim.tbl_map(function(version)
       return { version = version.version, published = version.published }
@@ -205,8 +208,22 @@ end
 
 ---Insert the package information into the buffer after finding the correct section for it
 ---@param package Package
-local function insert_package(package)
-  print("package: " .. vim.inspect(package))
+---@param dependency_type number?
+local function insert_package(package, dependency_type)
+  local pattern = (not dependency_type or dependency_type == dep_type.DEPENDENCY)
+      and DEPENDENCY_PATTERN
+    or DEV_DEPENDENCY_PATTERN
+  local pos = fn.searchpos(pattern, "n")
+  local lnum, col = pos[1], pos[2]
+  local indent = string.rep(" ", fn.indent(lnum + 1))
+  api.nvim_buf_set_lines(
+    0,
+    lnum,
+    lnum,
+    false,
+    { fmt("%s%s: %s", indent, package.name, package.latest) }
+  )
+  api.nvim_win_set_cursor(0, { lnum, col })
 end
 
 ---Process user input
