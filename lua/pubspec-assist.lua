@@ -10,7 +10,6 @@ local L = vim.log.levels
 local NAMESPACE = api.nvim_create_namespace("pubspec_assist")
 local BASE_URI = "https://pub.dartlang.org/api"
 local PUBSPEC_FILE = "pubspec.yaml"
-local PUBSPEC_VAR_NAME = "pubspec_versions"
 local HL_PREFIX = "PubspecAssist"
 
 ---@class State
@@ -146,17 +145,18 @@ local function match_dependencies(dependencies, lines)
   return results
 end
 
+---@type table<number, table<string, Package>>
+local versions = {}
+
 ---Add a dependency to the buffer variable dependencies table
 --- TODO: verify whether this causes race conditions as multiple async jobs
 --- are updating this variable potentially simultaneously.
 ---@param buf number
 ---@param package Package
 local function persist_package(buf, package)
-  local ok, versions = pcall(api.nvim_buf_get_var, buf, PUBSPEC_VAR_NAME)
-  versions = ok and versions or {}
-  versions[package.name] = package
-  versions.last_changed = api.nvim_buf_get_changedtick(buf)
-  api.nvim_buf_set_var(buf, PUBSPEC_VAR_NAME, versions)
+  versions[buf] = versions[buf] or {}
+  versions[buf][package.name] = package
+  versions[buf].last_changed = api.nvim_buf_get_changedtick(buf)
 end
 
 local function on_success(context, body)
@@ -242,10 +242,9 @@ function M.show_dependency_versions()
   vim.schedule(function()
     local buf_id = api.nvim_get_current_buf()
     local last_changed = api.nvim_buf_get_changedtick(buf_id)
-    local ok, cached_versions = pcall(api.nvim_buf_get_var, buf_id, PUBSPEC_VAR_NAME)
+    local cached_versions = versions[buf_id]
     if
-      ok
-      and last_changed
+      last_changed
       and cached_versions
       and cached_versions.last_changed
       and cached_versions.last_changed >= last_changed
