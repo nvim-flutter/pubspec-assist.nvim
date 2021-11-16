@@ -181,6 +181,29 @@ local function on_package_fetch_err(results, name, err)
   end
 end
 
+---Recursively search for the pubspec.yaml file by walking up the directory tree.
+---@return string|nil
+local function find_dependency_file()
+  local Path = require("plenary.path")
+  local limit = 0
+  local path = Path.new(fn.expand("%:p:h"))
+  local filepath = path:joinpath(PUBSPEC_FILE)
+  while not filepath:exists() and limit < 5 do
+    limit = limit + 1
+    path = path:parent()
+    filepath = path:joinpath(PUBSPEC_FILE)
+  end
+  if filepath:exists() then
+    return filepath:absolute()
+  end
+end
+
+---Insert the package information into the buffer after finding the correct section for it
+---@param package Package
+local function insert_package(package)
+  print("package: " .. vim.inspect(package))
+end
+
 ---Process user input
 ---@param win number
 local function handle_input_complete(win)
@@ -194,7 +217,11 @@ local function handle_input_complete(win)
     fetch(fmt("packages/%s", input), function(err)
       print(vim.inspect(err))
     end, function(data)
-      print("data: " .. vim.inspect(data))
+      local path = find_dependency_file()
+      if path then
+        vim.cmd(fmt("edit %s", path))
+        insert_package(data)
+      end
     end)
   end
 end
