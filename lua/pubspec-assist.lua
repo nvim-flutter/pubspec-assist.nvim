@@ -25,6 +25,11 @@ local state = {
   UNKNOWN = 3,
 }
 
+local dep_type = {
+  DEV = 1,
+  DEPENDENCY = 2,
+}
+
 local hls = {
   [state.OUTDATED] = HL_PREFIX .. "DependencyOutdated",
   [state.UP_TO_DATE] = HL_PREFIX .. "DependencyUpToDate",
@@ -111,6 +116,8 @@ local function fetch(path, on_err, on_success)
   })
 end
 
+---@param dependency table<string, any>
+---@return Package
 local function extract_dependency_info(dependency)
   local data = {}
   if dependency.versions then
@@ -125,23 +132,21 @@ local function extract_dependency_info(dependency)
   return data
 end
 
-local function match_dependencies(dependencies, lines)
-  local results = {}
+---Add the line number for each package to the Package object
+---@param lines string[]
+---@return table<string, number>
+local function get_lnum_lookup(lines)
+  local lookup = {}
   for lnum, line in ipairs(lines) do
     if line and line ~= "" then
       local key = line:match(".-:")
       if key then
         local package_name = vim.trim(key:gsub(":", ""))
-        if dependencies[package_name] then
-          results[package_name] = results[package_name] or {}
-          results[package_name].name = package_name
-          results[package_name].current = dependencies[package_name]
-          results[package_name].lnum = lnum
-        end
+        lookup[package_name] = lnum
       end
     end
   end
-  return results
+  return lookup
 end
 
 ---@type table<number, table<string, Package>>
@@ -220,7 +225,7 @@ local function handle_input_complete(win)
       local path = find_dependency_file()
       if path then
         vim.cmd(fmt("edit %s", path))
-        insert_package(data)
+        insert_package(extract_dependency_info(data))
       end
     end)
   end
@@ -248,6 +253,22 @@ function M.search_dependencies()
   utils.map("n", "<CR>", utils.wrap(handle_input_complete, win), opts)
 end
 
+---Add the type of a dependency to the Package object
+---@param list table<string, string|table>
+---@param dependency_type number
+---@param lnum_map table<string, number>
+---@return Package[]
+local function create_packages(list, dependency_type, lnum_map)
+  local result = {}
+  for name, version in pairs(list) do
+    if type(version) ~= "table" then
+      local lnum = lnum_map[name]
+      result[name] = { type = dependency_type, current = version, name = name, lnum = lnum }
+    end
+  end
+  return result
+end
+
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
 -- pub.dev for the version of each dependency.
 function M.show_dependency_versions()
@@ -272,30 +293,26 @@ function M.show_dependency_versions()
     end, lines)
     local content = table.concat(filtered, "\n")
     local pubspec = require("lyaml").load(content)
+    local lnum_map = get_lnum_lookup(lines)
     local dependencies = vim.tbl_extend(
       "keep",
       {},
-      pubspec.dependencies or {},
-      pubspec.dev_dependencies or {}
+      create_packages(pubspec.dependencies, dep_type.DEV, lnum_map) or {},
+      create_packages(pubspec.dev_dependencies, dep_type.DEPENDENCY, lnum_map) or {}
     )
     local jobs = {}
-    local results = match_dependencies(dependencies, lines)
-    for package, value in pairs(dependencies) do
+    for package, _ in pairs(dependencies) do
       -- NOTE: ignore packages who's values are tables as these are usually SDK packages e.g.
-      -- flutter_test: {
-      --   sdk = "flutter"
-      -- }
-      if type(value) ~= "table" then
-        local context = {
-          buf_id = buf_id,
-          results = results,
-          package_name = package,
-        }
-        local err, success =
-          wrap(on_package_fetch_err, context), wrap(on_package_fetch_success, context)
-        local job_id = fetch(fmt("packages/%s", package), err, success)
-        jobs[#jobs + 1] = job_id
-      end
+      -- flutter_test: { sdk = "flutter" }
+      local context = {
+        buf_id = buf_id,
+        results = dependencies,
+        package_name = package,
+      }
+      local err, success =
+        wrap(on_package_fetch_err, context), wrap(on_package_fetch_success, context)
+      local job_id = fetch(fmt("packages/%s", package), err, success)
+      jobs[#jobs + 1] = job_id
     end
   end)
 end
