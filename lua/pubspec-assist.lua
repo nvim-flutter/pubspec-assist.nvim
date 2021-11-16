@@ -256,6 +256,52 @@ local function handle_input_complete(win)
   end
 end
 
+function M.open_version_picker()
+  local line = fn.getline(".")
+  local utils = require("pubspec-assist.utils")
+  local package = require("lyaml").load(line)
+  if not package then
+    return
+  end
+  local package_name = vim.tbl_keys(package)[1]
+  local data = versions[api.nvim_get_current_buf()]
+  if not data or not data[package_name] then
+    return
+  end
+  local pkg_versions = data[package_name].versions
+  local buf = api.nvim_create_buf(false, true)
+  local lines = vim.tbl_map(function(item)
+    return item.version
+  end, pkg_versions)
+  api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  local title = package_name .. " versions:"
+  local win = require("plenary.popup").create(buf, {
+    title = title,
+    style = "minimal",
+    posinvert = true,
+    padding = { 0, 0, 0, 0 },
+    borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
+    cursorline = true,
+    relative = "cursor",
+    borderhighlight = "FloatBorder",
+    titlehighlight = "Title",
+    highlight = "Directory",
+    focusable = true,
+    maxheight = 20,
+    minwidth = api.nvim_strwidth(title),
+    line = "cursor+2",
+    col = "cursor-1",
+  })
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+  local function close()
+    api.nvim_win_close(win, true)
+  end
+  local opts = { buffer = 0 }
+  utils.map("n", "<ESC>", close, opts)
+  utils.map("n", "q", close, opts)
+end
+
 -- Create floating window to collect user input
 function M.search_dependencies()
   local utils = require("pubspec-assist.utils")
