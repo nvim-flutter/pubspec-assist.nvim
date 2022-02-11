@@ -369,7 +369,10 @@ function M.show_dependency_versions()
       return line ~= "" and not vim.startswith(line, "//")
     end, lines)
     local content = table.concat(filtered, "\n")
-    local pubspec = require("lyaml").load(content)
+    local ok, pubspec = pcall(require("lyaml").load, content)
+    if not ok then
+      return
+    end
     local lnum_map = get_lnum_lookup(lines)
     local dependencies = vim.tbl_extend(
       "keep",
