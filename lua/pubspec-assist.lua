@@ -256,10 +256,21 @@ local function handle_input_complete(win)
   end
 end
 
+---Parse a yaml string to lua table (object)
+---@param str string
+---@return table?
+local function parse_yaml(str)
+  local ok, yaml = pcall(require("lyaml").load, str)
+  if not ok then
+    return nil
+  end
+  return yaml
+end
+
 function M.open_version_picker()
   local line = fn.getline(".")
   local utils = require("pubspec-assist.utils")
-  local package = require("lyaml").load(line)
+  local package = parse_yaml(line)
   if not package then
     return
   end
@@ -369,8 +380,8 @@ function M.show_dependency_versions()
       return line ~= "" and not vim.startswith(line, "//")
     end, lines)
     local content = table.concat(filtered, "\n")
-    local ok, pubspec = pcall(require("lyaml").load, content)
-    if not ok then
+    local pubspec = parse_yaml(content)
+    if not pubspec then
       return
     end
     local lnum_map = get_lnum_lookup(lines)
