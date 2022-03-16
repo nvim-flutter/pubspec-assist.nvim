@@ -64,6 +64,31 @@ local defaults = {
   },
 }
 
+local function to_version(str)
+  local parts = vim.tbl_map(tonumber, vim.split(str:gsub("%^", ""), ".", { plain = true }))
+  return { parts[1], parts[2], parts[3] or 0 }
+end
+
+local function is_greater(version_1, version_2)
+  if version_1[1] > version_2[1] then
+    return true
+  elseif version_1[1] < version_2[1] then
+    return false
+  end
+
+  if version_1[2] > version_2[2] then
+    return true
+  elseif version_1[2] < version_2[2] then
+    return false
+  end
+
+  if version_1[3] > version_2[3] then
+    return true
+  elseif version_1[3] < version_2[3] then
+    return false
+  end
+end
+
 ---@param package Package
 ---@return State
 local function get_package_state(package)
@@ -71,9 +96,8 @@ local function get_package_state(package)
   if (not current or type(current) ~= "string") or (not latest or type(latest) ~= "string") then
     return state.UNKNOWN
   end
-  local v = require("semver")
-  local latest_v, current_v = v(latest:gsub("%^", "")), v(current:gsub("%^", ""))
-  return latest_v > current_v and state.OUTDATED or state.UP_TO_DATE
+  local latest_v, current_v = to_version(latest), to_version(current)
+  return is_greater(latest_v, current_v) and state.OUTDATED or state.UP_TO_DATE
 end
 
 ---Render the version text beside each line of the pubspec yaml
@@ -286,11 +310,16 @@ function M.open_version_picker()
   end, pkg_versions)
   api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local title = package_name .. " versions:"
+  local cursor_row = fn.winline()
+  local space_below = vim.o.lines - cursor_row
+  local space_above = cursor_row - 1
+  -- local size = #lines + 1 -- additional 1 for the statusline
+  local open_above = space_above > space_below
   local win = require("plenary.popup").create(buf, {
     title = title,
     style = "minimal",
-    posinvert = true,
-    padding = { 0, 0, 0, 0 },
+    pos = open_above and "botleft" or nil,
+    posinvert = false,
     borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
     cursorline = true,
     relative = "cursor",
@@ -298,9 +327,11 @@ function M.open_version_picker()
     titlehighlight = "Title",
     highlight = "Directory",
     focusable = true,
+    height = 15,
     maxheight = 20,
+    minheight = 10,
     minwidth = api.nvim_strwidth(title),
-    line = "cursor+2",
+    line = fmt("cursor%s", open_above and "-1" or "+1"),
     col = "cursor-1",
   })
   vim.bo[buf].modifiable = false
@@ -348,6 +379,9 @@ end
 ---@return Package[]
 local function create_packages(list, dependency_type, lnum_map)
   local result = {}
+  if not list then
+    return {}
+  end
   for name, version in pairs(list) do
     if type(version) ~= "table" then
       local lnum = lnum_map[name]
@@ -360,6 +394,7 @@ end
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
 -- pub.dev for the version of each dependency.
 function M.show_dependency_versions()
+  -- TODO: make this whole function asynchronous using plenary's async library
   vim.schedule(function()
     local wrap = require("pubspec-assist.utils").wrap
     local buf_id = api.nvim_get_current_buf()
@@ -436,6 +471,7 @@ function M.setup(user_config)
       PUBSPEC_FILE
     )
   )
+  vim.cmd('command! PubspecAssistSearch lua require("pubspec-assist").open_version_picker()')
 end
 
 return M
