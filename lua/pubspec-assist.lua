@@ -4,6 +4,8 @@ local api = vim.api
 local fn = vim.fn
 local fmt = string.format
 local notify = vim.notify
+local async = require("plenary.async")
+local curl = require("plenary.curl")
 
 local L = vim.log.levels
 
@@ -56,6 +58,9 @@ local icons = {
 ---@field name string
 ---@field type number
 
+---@table<number, table<number, Package>>
+local packages = {}
+
 local defaults = {
   highlights = {
     up_to_date = "Comment",
@@ -103,16 +108,25 @@ end
 ---Render the version text beside each line of the pubspec yaml
 ---@param buf_id number
 ---@param package Package
-local function show_version(buf_id, package)
+local function add_version(buf_id, package)
   if package and package.latest and package.lnum and not package.error then
     local p_state = get_package_state(package)
-    local icon, hl = icons[p_state], hls[p_state]
-    api.nvim_buf_set_extmark(buf_id, NAMESPACE, package.lnum - 1, -1, {
-      virt_text = { { icon .. " " .. package.latest, hl } },
-      virt_text_pos = "eol",
-      hl_mode = "combine",
-    })
+    package.ui = { icon = icons[p_state], hl = hls[p_state] }
+    packages[buf_id] = packages[buf_id] or {}
+    packages[buf_id][package.lnum] = package
   end
+end
+
+local set_line_version = function(buf_id, package, line)
+  if not package then
+    return
+  end
+  api.nvim_buf_set_extmark(buf_id, NAMESPACE, line - 1, -1, {
+    virt_text = { { package.ui.icon .. " " .. package.latest, package.ui.hl } },
+    virt_text_pos = "eol",
+    hl_mode = "combine",
+    ephemeral = true,
+  })
 end
 
 ---Fetch implementation
@@ -121,24 +135,20 @@ end
 ---@param on_success function(rsp: table)
 ---@return Job
 local function fetch(path, on_err, on_success)
-  local content_type = '"Content-Type: application/json"'
-  local command = fmt('curl -sS --compressed -X GET "%s/%s" -H %s', BASE_URI, path, content_type)
-  return fn.jobstart(command, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stderr = function(_, err, _)
-      -- ignore empty error responses, as curl sends an empty string back
-      if type(err) == "table" and err[1] == "" then
-        return
+  curl.get(fmt("%s/%s", BASE_URI, path), {
+    compressed = true,
+    accept = "application/json",
+    callback = function(result)
+      if result.status ~= 200 then
+        return on_err(result.body)
       end
-      on_err(err)
-    end,
-    on_stdout = function(_, body, _)
-      local data = vim.fn.json_decode(table.concat(body, "\n"))
-      if not data then
-        return notify("No data returned for " .. path, L.ERROR, { title = PLUGIN_TITLE })
-      end
-      on_success(data)
+      vim.schedule(function()
+        local data = vim.json.decode(result.body)
+        if not data then
+          return notify("No data returned for " .. path, L.ERROR, { title = PLUGIN_TITLE })
+        end
+        on_success(data)
+      end)
     end,
   })
 end
@@ -199,16 +209,14 @@ local function on_package_fetch_success(context, data)
   if results[name] then
     results[name] = vim.tbl_extend("force", results[name], extract_dependency_info(data))
     persist_package(buf_id, results[name])
-    show_version(buf_id, results[name])
+    add_version(buf_id, results[name])
   end
 end
 
 local function on_package_fetch_err(results, name, err)
   if type(err) == "table" and err[1] ~= "" then
     results[name] = results[name] or {}
-    results[name] = {
-      error = err,
-    }
+    results[name] = { error = err }
     notify(fmt("Error fetching package info for %s", name), L.ERROR, { title = PLUGIN_TITLE })
   end
 end
@@ -291,7 +299,7 @@ local function parse_yaml(str)
   return yaml
 end
 
-function M.open_version_picker()
+local function open_version_picker()
   local line = fn.getline(".")
   local utils = require("pubspec-assist.utils")
   local package = parse_yaml(line)
@@ -393,55 +401,52 @@ end
 
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
 -- pub.dev for the version of each dependency.
-function M.show_dependency_versions()
+M.show_dependency_versions = async.void(function()
   -- TODO: make this whole function asynchronous using plenary's async library
-  vim.schedule(function()
-    local wrap = require("pubspec-assist.utils").wrap
-    local buf_id = api.nvim_get_current_buf()
-    local last_changed = api.nvim_buf_get_changedtick(buf_id)
-    local cached_versions = versions[buf_id]
-    if
-      last_changed
-      and cached_versions
-      and cached_versions.last_changed
-      and cached_versions.last_changed >= last_changed
-    then
-      return
-    end
+  local wrap = require("pubspec-assist.utils").wrap
+  local buf_id = api.nvim_get_current_buf()
+  local last_changed = api.nvim_buf_get_changedtick(buf_id)
+  local cached_versions = versions[buf_id]
+  if
+    last_changed
+    and cached_versions
+    and cached_versions.last_changed
+    and cached_versions.last_changed >= last_changed
+  then
+    return
+  end
 
-    api.nvim_buf_clear_namespace(0, NAMESPACE, 0, -1)
-    local lines = api.nvim_buf_get_lines(0, 0, -1, false)
-    local filtered = vim.tbl_filter(function(line)
-      return line ~= "" and not vim.startswith(line, "//")
-    end, lines)
-    local content = table.concat(filtered, "\n")
-    local pubspec = parse_yaml(content)
-    if not pubspec then
-      return
-    end
-    local lnum_map = get_lnum_lookup(lines)
-    local dependencies = vim.tbl_extend(
-      "keep",
-      {},
-      create_packages(pubspec.dependencies, dep_type.DEV, lnum_map) or {},
-      create_packages(pubspec.dev_dependencies, dep_type.DEPENDENCY, lnum_map) or {}
+  local lines = api.nvim_buf_get_lines(0, 0, -1, false)
+  local filtered = vim.tbl_filter(function(line)
+    return line ~= "" and not vim.startswith(line, "//")
+  end, lines)
+  local content = table.concat(filtered, "\n")
+  local pubspec = parse_yaml(content)
+  if not pubspec then
+    return
+  end
+  local lnum_map = get_lnum_lookup(lines)
+  local dependencies = vim.tbl_extend(
+    "keep",
+    {},
+    create_packages(pubspec.dependencies, dep_type.DEV, lnum_map) or {},
+    create_packages(pubspec.dev_dependencies, dep_type.DEPENDENCY, lnum_map) or {}
+  )
+  for package, _ in pairs(dependencies) do
+    -- NOTE: ignore packages who's values are tables as these are usually SDK packages e.g.
+    -- flutter_test: { sdk = "flutter" }
+    local context = {
+      buf_id = buf_id,
+      results = dependencies,
+      package_name = package,
+    }
+    fetch(
+      fmt("packages/%s", package),
+      wrap(on_package_fetch_err, context),
+      wrap(on_package_fetch_success, context)
     )
-    local jobs = {}
-    for package, _ in pairs(dependencies) do
-      -- NOTE: ignore packages who's values are tables as these are usually SDK packages e.g.
-      -- flutter_test: { sdk = "flutter" }
-      local context = {
-        buf_id = buf_id,
-        results = dependencies,
-        package_name = package,
-      }
-      local err, success =
-        wrap(on_package_fetch_err, context), wrap(on_package_fetch_success, context)
-      local job_id = fetch(fmt("packages/%s", package), err, success)
-      jobs[#jobs + 1] = job_id
-    end
-  end)
-end
+  end
+end)
 
 local function dependencies_installed()
   local ok = pcall(require, "lyaml")
@@ -452,6 +457,12 @@ local function dependencies_installed()
     return false
   end
   return true
+end
+
+---@param bufnr number
+---@return boolean
+local is_dep_file = function(bufnr)
+  return vim.endswith(api.nvim_buf_get_name(bufnr), PUBSPEC_FILE)
 end
 
 ---Adopt user config and initialise the plugin.
@@ -471,7 +482,20 @@ function M.setup(user_config)
       PUBSPEC_FILE
     )
   )
-  vim.cmd('command! PubspecAssistSearch lua require("pubspec-assist").open_version_picker()')
+
+  api.nvim_add_user_command("PubspecAssistSearch", open_version_picker, {})
+
+  api.nvim_set_decoration_provider(NAMESPACE, {
+    on_win = function(_, _, bufnr, topline, botline)
+      if packages[bufnr] and is_dep_file(bufnr) then
+        for index = topline, botline, 1 do
+          local lnum = index - 1
+          local package = packages[bufnr][lnum]
+          set_line_version(bufnr, package, lnum)
+        end
+      end
+    end,
+  })
 end
 
 return M
