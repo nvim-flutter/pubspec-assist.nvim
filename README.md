@@ -21,6 +21,7 @@ This plugin is in _alpha_ but should be stable enough for daily usage.
 ## Requirements:
 
 - `nvim 0.7+`
+- `plenary.nvim`
 
 ## Installation
 
