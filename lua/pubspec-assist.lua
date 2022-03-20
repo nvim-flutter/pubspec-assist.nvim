@@ -320,8 +320,10 @@ local function open_version_picker()
   api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local title = package_name .. " versions:"
   vim.ui.select(lines, { prompt = title }, function(choice)
-    local separator = string.find(line, ":")
-    api.nvim_buf_set_text(0, lnum - 1, separator, lnum - 1, -1, { " " .. choice })
+    if choice then
+      local separator = string.find(line, ":")
+      api.nvim_buf_set_text(0, lnum - 1, separator, lnum - 1, #line, { " ^" .. choice })
+    end
   end)
 end
 
