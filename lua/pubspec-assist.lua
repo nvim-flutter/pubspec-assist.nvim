@@ -9,6 +9,7 @@ local curl = require("plenary.curl")
 
 local L = vim.log.levels
 
+local AUGROUP = api.nvim_create_augroup("PubspecAssist", { clear = true })
 local NAMESPACE = api.nvim_create_namespace("pubspec_assist")
 local BASE_URI = "https://pub.dartlang.org/api"
 local PUBSPEC_FILE = "pubspec.yaml"
@@ -401,7 +402,7 @@ end
 
 -- First read the pubspec.yaml file into a lua table loop through this table and use plenary to cURL
 -- pub.dev for the version of each dependency.
-M.show_dependency_versions = async.void(function()
+local show_dependency_versions = async.void(function()
   -- TODO: make this whole function asynchronous using plenary's async library
   local wrap = require("pubspec-assist.utils").wrap
   local buf_id = api.nvim_get_current_buf()
@@ -473,15 +474,15 @@ function M.setup(user_config)
     return
   end
   M.config = vim.tbl_deep_extend("force", defaults, user_config)
-  vim.cmd(fmt("highlight link %s %s", hls[state.OUTDATED], M.config.highlights.outdated))
-  vim.cmd(fmt("highlight link %s %s", hls[state.UP_TO_DATE], M.config.highlights.up_to_date))
-  vim.cmd(fmt("highlight link %s %s", hls[state.UNKNOWN], M.config.highlights.unknown))
-  vim.cmd(
-    fmt(
-      'autocmd! BufEnter,BufWritePost %s lua require("pubspec-assist").show_dependency_versions()',
-      PUBSPEC_FILE
-    )
-  )
+  api.nvim_set_hl(0, hls[state.OUTDATED], { link = M.config.highlights.outdated })
+  api.nvim_set_hl(0, hls[state.UP_TO_DATE], { link = M.config.highlights.up_to_date })
+  api.nvim_set_hl(0, hls[state.UNKNOWN], { link = M.config.highlights.unknown })
+
+  api.nvim_create_autocmd({ "BufEnter", "BufWritePost" }, {
+    group = AUGROUP,
+    pattern = PUBSPEC_FILE,
+    callback = show_dependency_versions,
+  })
 
   api.nvim_add_user_command("PubspecAssistSearch", open_version_picker, {})
 
