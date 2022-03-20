@@ -302,7 +302,7 @@ end
 
 local function open_version_picker()
   local line = fn.getline(".")
-  local utils = require("pubspec-assist.utils")
+  local lnum = unpack(api.nvim_win_get_cursor(0))
   local package = parse_yaml(line)
   if not package then
     return
@@ -319,38 +319,10 @@ local function open_version_picker()
   end, pkg_versions)
   api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local title = package_name .. " versions:"
-  local cursor_row = fn.winline()
-  local space_below = vim.o.lines - cursor_row
-  local space_above = cursor_row - 1
-  -- local size = #lines + 1 -- additional 1 for the statusline
-  local open_above = space_above > space_below
-  local win = require("plenary.popup").create(buf, {
-    title = title,
-    style = "minimal",
-    pos = open_above and "botleft" or nil,
-    posinvert = false,
-    borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
-    cursorline = true,
-    relative = "cursor",
-    borderhighlight = "FloatBorder",
-    titlehighlight = "Title",
-    highlight = "Directory",
-    focusable = true,
-    height = 15,
-    maxheight = 20,
-    minheight = 10,
-    minwidth = api.nvim_strwidth(title),
-    line = fmt("cursor%s", open_above and "-1" or "+1"),
-    col = "cursor-1",
-  })
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].readonly = true
-  local function close()
-    api.nvim_win_close(win, true)
-  end
-  local opts = { buffer = 0 }
-  utils.map("n", "<ESC>", close, opts)
-  utils.map("n", "q", close, opts)
+  vim.ui.select(lines, { prompt = title }, function(choice)
+    local separator = string.find(line, ":")
+    api.nvim_buf_set_text(0, lnum - 1, separator, lnum - 1, -1, { " " .. choice })
+  end)
 end
 
 -- Create floating window to collect user input
@@ -484,7 +456,15 @@ function M.setup(user_config)
     callback = show_dependency_versions,
   })
 
-  api.nvim_add_user_command("PubspecAssistPickVersion", open_version_picker, {})
+  api.nvim_create_autocmd({ "BufEnter" }, {
+    group = AUGROUP,
+    pattern = PUBSPEC_FILE,
+    callback = function()
+      -- FIXME: make this command buffer local
+      api.nvim_add_user_command("PubspecAssistPickVersion", open_version_picker, {})
+    end,
+  })
+
   api.nvim_add_user_command("PubspecAssistSearch", M.add_package, {})
 
   api.nvim_set_decoration_provider(NAMESPACE, {
