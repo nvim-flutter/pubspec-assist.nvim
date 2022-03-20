@@ -17,7 +17,6 @@ use {
   'akinsho/pubspec-assist.nvim',
   requires = 'plenary.nvim',
   rocks = {
-    'semver',
     {
       'lyaml',
       server = 'http://rocks.moonscript.org',
