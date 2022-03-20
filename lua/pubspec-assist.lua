@@ -267,28 +267,6 @@ local function insert_package(package, dependency_type)
   api.nvim_win_set_cursor(0, { lnum, indent + 1 })
 end
 
----Process user input
----@param win number
-local function handle_input_complete(win)
-  vim.cmd("stopinsert")
-  local input = vim.trim(vim.fn.getline("."))
-  if not api.nvim_win_is_valid(win) then
-    return
-  end
-  local ok = pcall(api.nvim_win_close, win, true)
-  if ok and input ~= "" then
-    fetch(fmt("packages/%s", input), function(err)
-      print(vim.inspect(err))
-    end, function(data)
-      local path = find_dependency_file()
-      if path then
-        vim.cmd(fmt("edit %s", path))
-        insert_package(extract_dependency_info(data))
-      end
-    end)
-  end
-end
-
 ---Parse a yaml string to lua table (object)
 ---@param str string
 ---@return table?
@@ -329,30 +307,19 @@ end
 
 -- Create floating window to collect user input
 function M.add_package()
-  local utils = require("pubspec-assist.utils")
-  local win = require("plenary.popup").create("", {
-    title = "Enter dependency name(s)",
-    style = "minimal",
-    borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" },
-    relative = "center",
-    borderhighlight = "FloatBorder",
-    titlehighlight = "Title",
-    highlight = "Directory",
-    focusable = true,
-    width = 35,
-    height = 1,
-  })
-  local opts = { buffer = 0 }
-  local function close_win()
-    vim.cmd("stopinsert")
-    if api.nvim_win_is_valid(win) then
-      api.nvim_win_close(win, true)
+  vim.ui.input({ prompt = "Enter dependency name(s)" }, function(input)
+    if input and input ~= "" then
+      fetch(fmt("packages/%s", input), function(err)
+        vim.notify(err, "error", { title = "Pubspec assist" })
+      end, function(data)
+        local path = find_dependency_file()
+        if path then
+          vim.cmd(fmt("edit %s", path))
+          insert_package(extract_dependency_info(data))
+        end
+      end)
     end
-  end
-  vim.keymap.set("i", "<Esc>", close_win, opts)
-  vim.keymap.set("n", "<Esc>", close_win, opts)
-  vim.keymap.set("i", "<CR>", utils.wrap(handle_input_complete, win), opts)
-  vim.keymap.set("n", "<CR>", utils.wrap(handle_input_complete, win), opts)
+  end)
 end
 
 ---Add the type of a dependency to the Package object
