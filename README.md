@@ -3,9 +3,15 @@
 A neovim clone of [pubspec-assist](https://github.com/jeroen-meijer/pubspec-assist) a plugin for adding and updating dart dependencies in pubspec.yaml files.
 
 ## Status:
+
 This plugins is still in development.
 
+## Requirements:
+
+- `nvim 0.7+`
+
 ## Installation
+
 ```lua
 use {
   'akinsho/pubspec-assist.nvim',
@@ -28,6 +34,7 @@ use {
 ```
 
 ## Contributing
+
 If you decide to use this plugin but want to see X feature implemented, then rather than making feature requests consider
 contributing PRs instead. I won't be taking a endless feature requests and the best way to see a feature want implemented
 is to contibute it yourself.
