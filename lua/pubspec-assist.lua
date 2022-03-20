@@ -354,7 +354,7 @@ local function open_version_picker()
 end
 
 -- Create floating window to collect user input
-function M.search_dependencies()
+function M.add_package()
   local utils = require("pubspec-assist.utils")
   local win = require("plenary.popup").create("", {
     title = "Enter dependency name(s)",
@@ -375,10 +375,10 @@ function M.search_dependencies()
       api.nvim_win_close(win, true)
     end
   end
-  utils.map("i", "<Esc>", close_win, opts)
-  utils.map("n", "<Esc>", close_win, opts)
-  utils.map("i", "<CR>", utils.wrap(handle_input_complete, win), opts)
-  utils.map("n", "<CR>", utils.wrap(handle_input_complete, win), opts)
+  vim.keymap.set("i", "<Esc>", close_win, opts)
+  vim.keymap.set("n", "<Esc>", close_win, opts)
+  vim.keymap.set("i", "<CR>", utils.wrap(handle_input_complete, win), opts)
+  vim.keymap.set("n", "<CR>", utils.wrap(handle_input_complete, win), opts)
 end
 
 ---Add the type of a dependency to the Package object
@@ -484,7 +484,8 @@ function M.setup(user_config)
     callback = show_dependency_versions,
   })
 
-  api.nvim_add_user_command("PubspecAssistSearch", open_version_picker, {})
+  api.nvim_add_user_command("PubspecAssistPickVersion", open_version_picker, {})
+  api.nvim_add_user_command("PubspecAssistSearch", M.add_package, {})
 
   api.nvim_set_decoration_provider(NAMESPACE, {
     on_win = function(_, _, bufnr, topline, botline)
