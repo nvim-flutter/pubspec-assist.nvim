@@ -434,7 +434,7 @@ function M.setup(user_config)
     end,
   })
 
-  api.nvim_add_user_command("PubspecAssistSearch", M.add_package, {})
+  api.nvim_create_user_command("PubspecAssistSearch", M.add_package, {})
 
   api.nvim_set_decoration_provider(NAMESPACE, {
     on_win = function(_, _, bufnr, topline, botline)
