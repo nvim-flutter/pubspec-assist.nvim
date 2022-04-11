@@ -430,7 +430,7 @@ function M.setup(user_config)
     pattern = PUBSPEC_FILE,
     callback = function()
       -- FIXME: make this command buffer local
-      api.nvim_add_user_command("PubspecAssistPickVersion", open_version_picker, {})
+      api.nvim_create_user_command("PubspecAssistPickVersion", open_version_picker, {})
     end,
   })
 
