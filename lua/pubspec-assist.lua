@@ -9,7 +9,7 @@ local curl = require("plenary.curl")
 
 local L = vim.log.levels
 
-local AUGROUP = api.nvim_create_augroup("PubspecAssist", { clear = true })
+local AUGROUP = "PubspecAssist"
 local NAMESPACE = api.nvim_create_namespace("pubspec_assist")
 local BASE_URI = "https://pub.dartlang.org/api"
 local PUBSPEC_FILE = "pubspec.yaml"
@@ -407,10 +407,7 @@ local is_dep_file = function(bufnr)
   return vim.endswith(api.nvim_buf_get_name(bufnr), PUBSPEC_FILE)
 end
 
----Adopt user config and initialise the plugin.
----@param user_config PubspecAssistConfig
-function M.setup(user_config)
-  user_config = user_config or {}
+local function setup(user_config)
   if not dependencies_installed() then
     return
   end
@@ -418,6 +415,39 @@ function M.setup(user_config)
   api.nvim_set_hl(0, hls[state.OUTDATED], { link = M.config.highlights.outdated })
   api.nvim_set_hl(0, hls[state.UP_TO_DATE], { link = M.config.highlights.up_to_date })
   api.nvim_set_hl(0, hls[state.UNKNOWN], { link = M.config.highlights.unknown })
+
+  api.nvim_create_user_command("PubspecAssistSearch", M.add_package, {})
+
+  api.nvim_set_decoration_provider(NAMESPACE, {
+    on_win = function(_, _, bufnr, topline, botline)
+      if packages[bufnr] and is_dep_file(bufnr) then
+        for index = topline, botline, 1 do
+          local lnum = index - 1
+          local package = packages[bufnr][lnum]
+          set_line_version(bufnr, package, lnum)
+        end
+      end
+    end,
+  })
+end
+
+---Adopt user config and initialise the plugin.
+---@param user_config PubspecAssistConfig
+function M.setup(user_config)
+  user_config = user_config or {}
+  api.nvim_create_augroup(AUGROUP, { clear = true })
+  if api.nvim_buf_get_name(api.nvim_get_current_buf()):match(PUBSPEC_FILE) then
+    setup(user_config)
+  else
+    api.nvim_create_autocmd("BufEnter", {
+      once = true,
+      group = AUGROUP,
+      pattern = PUBSPEC_FILE,
+      callback = function()
+        setup(user_config)
+      end,
+    })
+  end
 
   api.nvim_create_autocmd({ "BufEnter", "BufWritePost" }, {
     group = AUGROUP,
@@ -435,20 +465,6 @@ function M.setup(user_config)
         open_version_picker,
         {}
       )
-    end,
-  })
-
-  api.nvim_create_user_command("PubspecAssistSearch", M.add_package, {})
-
-  api.nvim_set_decoration_provider(NAMESPACE, {
-    on_win = function(_, _, bufnr, topline, botline)
-      if packages[bufnr] and is_dep_file(bufnr) then
-        for index = topline, botline, 1 do
-          local lnum = index - 1
-          local package = packages[bufnr][lnum]
-          set_line_version(bufnr, package, lnum)
-        end
-      end
     end,
   })
 end
