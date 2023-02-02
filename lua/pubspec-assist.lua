@@ -6,6 +6,7 @@ local fmt = string.format
 local notify = vim.notify
 local async = require("plenary.async")
 local curl = require("plenary.curl")
+local parser = require("pubspec-assist.parser")
 
 local L = vim.log.levels
 
@@ -271,7 +272,7 @@ end
 ---@param str string
 ---@return table?
 local function parse_yaml(str)
-  local ok, yaml = pcall(require("lyaml").load, str)
+  local ok, yaml = pcall(parser.parse, str)
   if not ok then
     return nil
   end
@@ -390,17 +391,6 @@ local show_dependency_versions = async.void(function()
   end
 end)
 
-local function dependencies_installed()
-  local ok = pcall(require, "lyaml")
-  if not ok then
-    notify("Please ensure lyaml is installed see the README for more information", L.ERROR, {
-      title = PLUGIN_TITLE,
-    })
-    return false
-  end
-  return true
-end
-
 ---@param bufnr number
 ---@return boolean
 local is_dep_file = function(bufnr)
@@ -408,9 +398,6 @@ local is_dep_file = function(bufnr)
 end
 
 local function setup(user_config)
-  if not dependencies_installed() then
-    return
-  end
   M.config = vim.tbl_deep_extend("force", defaults, user_config)
   api.nvim_set_hl(0, hls[state.OUTDATED], { link = M.config.highlights.outdated })
   api.nvim_set_hl(0, hls[state.UP_TO_DATE], { link = M.config.highlights.up_to_date })
