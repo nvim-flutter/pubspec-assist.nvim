@@ -334,7 +334,8 @@ local function create_packages(list, dependency_type, lnum_map)
     return {}
   end
   for name, version in pairs(list) do
-    if type(version) ~= "table" then
+    -- According https://json.schemastore.org/pubspec.json "any" is a valid version value.
+    if type(version) ~= "table" and version ~= "any" then
       local lnum = lnum_map[name]
       result[name] = { type = dependency_type, current = version, name = name, lnum = lnum }
     end
