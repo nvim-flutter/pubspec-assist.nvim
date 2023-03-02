@@ -259,59 +259,59 @@ local function open_version_picker()
   end)
 end
 
+---@param msg string[]
+---@return string
+local function join_lines(msg)
+  return table.concat(msg, "\n")
+end
+
 -- Create floating window to collect user input
 function M.add_package()
-	if add_package_job then
-		vim.notify 'Process is running'
-	else
-		vim.ui.input({ prompt = "Enter dependency name(s) " }, function(input)
-			add_package_job = job:new({
-				command = "flutter",
-				args = { "pub", "add", input },
-			})
-			add_package_job:after_success(vim.schedule_wrap(function(j)
-				vim.notify("add package success", vim.log.levels.INFO)
-				local message = table.concat(j:result(), "\n")
-				vim.notify(message, vim.log.levels.INFO)
-
-				-- reload buffer when add package success
-				vim.cmd.e();
-				add_package_job = nil
-			end))
-			add_package_job:after_failure(vim.schedule_wrap(function(j)
-				vim.notify(j:stderr_result(), vim.log.levels.ERROR)
-				add_package_job = nil
-			end))
-			add_package_job:start()
-		end)
-	end
+  if add_package_job then
+    return
+  end
+  vim.ui.input({ prompt = "Enter dependency name(s) " }, function(input)
+    add_package_job = job:new({
+      command = "flutter",
+      args = { "pub", "add", input },
+    })
+    add_package_job:after_success(vim.schedule_wrap(function(j)
+      vim.notify(join_lines(j:result()), vim.log.levels.INFO)
+      -- reload buffer when add package success
+      vim.cmd.e()
+      add_package_job = nil
+    end))
+    add_package_job:after_failure(vim.schedule_wrap(function(j)
+      vim.notify(join_lines(j:stderr_result()), vim.log.levels.ERROR)
+      add_package_job = nil
+    end))
+    add_package_job:start()
+  end)
 end
 
 function M.add_dev_package()
-	if add_package_job then
-		vim.notify 'Process is running'
-	else
-		vim.ui.input({ prompt = "Enter dependency name(s) " }, function(input)
-			add_package_job = job:new({
-				command = "flutter",
-				args = { "pub", "add", input, "--dev" },
-			})
-			add_package_job:after_success(vim.schedule_wrap(function(j)
-				vim.notify("add package success", vim.log.levels.INFO)
-				local message = table.concat(j:result(), "\n")
-				vim.notify(message, vim.log.levels.INFO)
+  if add_package_job then
+    return
+  end
 
-				-- reload buffer when add package success
-				vim.cmd.e();
-				add_package_job = nil
-			end))
-			add_package_job:after_failure(vim.schedule_wrap(function(j)
-				vim.notify(j:stderr_result(), vim.log.levels.ERROR)
-				add_package_job = nil
-			end))
-			add_package_job:start()
-		end)
-	end
+  vim.ui.input({ prompt = "Enter dependency name(s) " }, function(input)
+    add_package_job = job:new({
+      command = "flutter",
+      args = { "pub", "add", input, "--dev" },
+    })
+    add_package_job:after_success(vim.schedule_wrap(function(j)
+      local message = table.concat(j:result(), "\n")
+      vim.notify(message, vim.log.levels.INFO)
+      -- reload buffer when add package success
+      vim.cmd.e()
+      add_package_job = nil
+    end))
+    add_package_job:after_failure(vim.schedule_wrap(function(j)
+      vim.notify(j:stderr_result(), vim.log.levels.ERROR)
+      add_package_job = nil
+    end))
+    add_package_job:start()
+  end)
 end
 
 ---Add the type of a dependency to the Package object
