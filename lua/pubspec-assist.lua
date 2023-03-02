@@ -17,8 +17,6 @@ local BASE_URI = "https://pub.dartlang.org/api"
 local PUBSPEC_FILE = "pubspec.yaml"
 local HL_PREFIX = "PubspecAssist"
 local PLUGIN_TITLE = "Pubspec Assist"
-local DEV_DEPENDENCY_PATTERN = "dev_dependencies:"
-local DEPENDENCY_PATTERN = "dependencies:"
 local add_package_job = nil
 
 ---@class State
@@ -225,54 +223,7 @@ local function on_package_fetch_err(results, name, err)
   end
 end
 
----Recursively search for the pubspec.yaml file by walking up the directory tree.
----@return string|nil
-local function find_dependency_file()
-  local Path = require("plenary.path")
-  local limit = 0
-  local path = Path.new(fn.expand("%:p:h"))
-  local filepath = path:joinpath(PUBSPEC_FILE)
-  while not filepath:exists() and limit < 5 do
-    limit = limit + 1
-    path = path:parent()
-    filepath = path:joinpath(PUBSPEC_FILE)
-  end
-  if filepath:exists() then
-    return filepath:absolute()
-  end
-end
-
-local function get_block_end(dependency_type)
-  local pattern = (not dependency_type or dependency_type == dep_type.DEPENDENCY)
-      and DEPENDENCY_PATTERN
-    or DEV_DEPENDENCY_PATTERN
-  local pos = fn.searchpos(pattern, "n")
-  local lnum = pos[1]
-  local indent = fn.indent(lnum + 1)
-  local next_indent = indent
-  local curr_line = lnum + 1
-  local line_count = api.nvim_buf_line_count(0)
-  while next_indent > 0 and curr_line <= line_count do
-    next_indent = fn.indent(curr_line + 1)
-    curr_line = curr_line + 1
-  end
-  return curr_line - 1, indent
-end
-
----Insert the package information into the buffer after finding the correct section for it
----@param package Package
----@param dependency_type number?
-local function insert_package(package, dependency_type)
-  local lnum, indent = get_block_end(dependency_type)
-  local indent_str = string.rep(" ", indent)
-  local dep = fmt("%s%s: ^%s", indent_str, package.name, package.latest)
-  api.nvim_buf_set_lines(0, lnum, lnum, false, { dep })
-  api.nvim_win_set_cursor(0, { lnum, indent + 1 })
-end
-
----Parse a yaml string to lua table (object)
----@param str string
----@return table?
+--@return table?
 local function parse_yaml(str)
   local ok, yaml = pcall(parser.parse, str)
   if not ok then
