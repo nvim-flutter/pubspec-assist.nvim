@@ -5,6 +5,7 @@ local fn = vim.fn
 local fmt = string.format
 local notify = vim.notify
 local async = require("plenary.async")
+local job = require("plenary.job")
 local curl = require("plenary.curl")
 local parser = require("pubspec-assist.parser")
 
@@ -18,6 +19,7 @@ local HL_PREFIX = "PubspecAssist"
 local PLUGIN_TITLE = "Pubspec Assist"
 local DEV_DEPENDENCY_PATTERN = "dev_dependencies:"
 local DEPENDENCY_PATTERN = "dependencies:"
+local add_package_job = nil
 
 ---@class State
 ---@field OUTDATED number
@@ -308,19 +310,57 @@ end
 
 -- Create floating window to collect user input
 function M.add_package()
-  vim.ui.input({ prompt = "Enter dependency name(s)" }, function(input)
-    if input and input ~= "" then
-      fetch(fmt("packages/%s", input), function(err)
-        vim.notify(err, "error", { title = "Pubspec assist" })
-      end, function(data)
-        local path = find_dependency_file()
-        if path then
-          vim.cmd(fmt("edit %s", path))
-          insert_package(extract_dependency_info(data))
-        end
-      end)
-    end
-  end)
+	if add_package_job then
+		vim.notify 'Process is running'
+	else
+		vim.ui.input({ prompt = "Enter dependency name(s) " }, function(input)
+			add_package_job = job:new({
+				command = "flutter",
+				args = { "pub", "add", input },
+			})
+			add_package_job:after_success(vim.schedule_wrap(function(j)
+				vim.notify("add package success", vim.log.levels.INFO)
+				local message = table.concat(j:result(), "\n")
+				vim.notify(message, vim.log.levels.INFO)
+
+				-- reload buffer when add package success
+				vim.cmd.e();
+				add_package_job = nil
+			end))
+			add_package_job:after_failure(vim.schedule_wrap(function(j)
+				vim.notify(j:stderr_result(), vim.log.levels.ERROR)
+				add_package_job = nil
+			end))
+			add_package_job:start()
+		end)
+	end
+end
+
+function M.add_dev_package()
+	if add_package_job then
+		vim.notify 'Process is running'
+	else
+		vim.ui.input({ prompt = "Enter dependency name(s) " }, function(input)
+			add_package_job = job:new({
+				command = "flutter",
+				args = { "pub", "add", input, "--dev" },
+			})
+			add_package_job:after_success(vim.schedule_wrap(function(j)
+				vim.notify("add package success", vim.log.levels.INFO)
+				local message = table.concat(j:result(), "\n")
+				vim.notify(message, vim.log.levels.INFO)
+
+				-- reload buffer when add package success
+				vim.cmd.e();
+				add_package_job = nil
+			end))
+			add_package_job:after_failure(vim.schedule_wrap(function(j)
+				vim.notify(j:stderr_result(), vim.log.levels.ERROR)
+				add_package_job = nil
+			end))
+			add_package_job:start()
+		end)
+	end
 end
 
 ---Add the type of a dependency to the Package object
@@ -404,7 +444,8 @@ local function setup(user_config)
   api.nvim_set_hl(0, hls[state.UP_TO_DATE], { link = M.config.highlights.up_to_date })
   api.nvim_set_hl(0, hls[state.UNKNOWN], { link = M.config.highlights.unknown })
 
-  api.nvim_create_user_command("PubspecAssistSearch", M.add_package, {})
+  api.nvim_create_user_command("PubspecAssistAddPackage", M.add_package, {})
+  api.nvim_create_user_command("PubspecAssistAddDevPackage", M.add_dev_package, {})
 
   api.nvim_set_decoration_provider(NAMESPACE, {
     on_win = function(_, _, bufnr, topline, botline)
