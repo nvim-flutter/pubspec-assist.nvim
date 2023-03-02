@@ -19,18 +19,14 @@ local HL_PREFIX = "PubspecAssist"
 local PLUGIN_TITLE = "Pubspec Assist"
 local add_package_job = nil
 
----@class State
----@field OUTDATED number
----@field UP_TO_DATE number
----@field UNKNOWN number
-
----@type State
+---@enum State
 local state = {
   OUTDATED = 1,
   UP_TO_DATE = 2,
   UNKNOWN = 3,
 }
 
+---@enum DEP_TYPE
 local dep_type = {
   DEV = 1,
   DEPENDENCY = 2,
@@ -54,6 +50,8 @@ local icons = {
 ---@field current string
 ---@field latest string
 ---@field latest_published string
+---@field dependency_type DEP_TYPE
+---@field last_changed number
 ---@field versions table[]
 ---@field lnum number
 ---@field error table
@@ -135,7 +133,6 @@ end
 ---@param path string
 ---@param on_err function(rsp: table)
 ---@param on_success function(rsp: table)
----@return Job
 local function fetch(path, on_err, on_success)
   curl.get(fmt("%s/%s", BASE_URI, path), {
     compressed = true,
@@ -188,7 +185,7 @@ local function get_lnum_lookup(lines)
   return lookup
 end
 
----@type table<number, table<string, Package>>
+---@type table<number, Package>
 local versions = {}
 
 ---Add a dependency to the buffer variable dependencies table
@@ -233,7 +230,7 @@ local function parse_yaml(str)
 end
 
 local function open_version_picker()
-  local line = fn.getline(".")
+  local line = fn.getline(".") --[[@as string]]
   local lnum = unpack(api.nvim_win_get_cursor(0))
   local package = parse_yaml(line)
   if not package then
@@ -315,9 +312,9 @@ function M.add_dev_package()
 end
 
 ---Add the type of a dependency to the Package object
----@param list table<string, string|table>
----@param dependency_type number
----@param lnum_map table<string, number>
+---@param list {[string]: string|table}
+---@param dependency_type DEP_TYPE
+---@param lnum_map {[string]: number}
 ---@return Package[]
 local function create_packages(list, dependency_type, lnum_map)
   local result = {}
