@@ -29,16 +29,6 @@ This plugin is in _alpha_ but should be stable enough for daily usage.
 use {
   'akinsho/pubspec-assist.nvim',
   requires = 'plenary.nvim',
-  rocks = {
-    {
-      'lyaml',
-      server = 'http://rocks.moonscript.org',
-      -- If using macOS or Ubuntu, you may need to install the `libyaml` package.
-      -- if you install libyaml with homebrew you will need to set the YAML_DIR
-      -- to the location of the homebrew installation of libyaml e.g.
-      -- env = { YAML_DIR = '/opt/homebrew/Cellar/libyaml/0.2.5/' },
-    },
-  },
   config = function()
     require('pubspec-assist').setup()
   end,
