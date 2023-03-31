@@ -43,31 +43,6 @@ dependencies:
   async: ^2.8.1
   url_launcher: ^6.0.12
   flutter_config: ^2.0.0
-  rxdart: ^0.27.1
-  package_info: ^2.0.2
-  device_info: ^2.0.2
-  instabug_flutter: ^10.9.0
-  percent_indicator: ^3.4.0
-  rive: ^0.7.17
-  sentry_flutter: ^6.0.0
-  scrollable_positioned_list: ^0.2.0-nullsafety.0
-  tuple: ^2.0.0
-  timeago: ^3.1.0
-  flutter_dotenv: ^5.0.0
-  pub_semver: ^2.0.0
-  intl: ^0.17.0
-  retry: ^3.1.0
-  recase: ^4.0.0
-  # graphql dependencies
-  ferry: ^0.10.3
-  gql_error_link: ^0.2.0
-  gql_transform_link: ^0.2.0
-  gql_http_link: ^0.4.0
-  hive: ^2.0.4
-  hive_flutter: ^1.0.0
-  ferry_hive_store: ^0.4.3
-  flutuate_mixpanel: ^2.0.0-nullsafety
-  collection: ^1.15.0-nullsafety.4
 
 dev_dependencies:
   flutter_test:
