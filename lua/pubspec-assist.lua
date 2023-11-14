@@ -241,7 +241,7 @@ local function open_version_picker()
   if not data or not data[package_name] then
     return
   end
-  local pkg_versions = data[package_name].versions
+  local pkg_versions = fn.reverse(data[package_name].versions)
   local buf = api.nvim_create_buf(false, true)
   local lines = vim.tbl_map(function(item)
     return item.version
